@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+        <meta http-equiv="Pragma" content="no-cache">
+        <meta http-equiv="Expires" content="0">
+    <meta charset="UTF-8">
+    <title>Video Frame Extractor</title>
+</head>
+<body>
+    <h1>Upload Video and Specify Keyframes</h1>
+    <form id="upload-form">
+        <input type="file" name="video" required><br>
+        Keyframes (comma-separated, e.g., 5, 10):<br>
+        <input type="text" name="keyframes" required><br>
+        <button type="submit">Upload and Process</button>
+    </form>
+    <video id="video-preview" controls style="display: none; width: 60%; margin-top: 20px;"></video>
+    <div id="images-container"></div>
+
+    <script>
+        document.getElementById('upload-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const formData = new FormData(this);
+            fetch('/upload', {
+                method: 'POST',
+                body: formData,
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('video-preview').src = data.videoUrl;
+                document.getElementById('video-preview').style.display = 'block';
+
+                const imagesContainer = document.getElementById('images-container');
+                imagesContainer.innerHTML = '';  // Clear previous images
+                data.images.forEach(image => {
+                    console.log("Loading image:", image);  // Log the image URL to the console
+                    const img = document.createElement('img');
+                    img.src = image;
+                    img.style.marginTop = '10px';
+                    imagesContainer.appendChild(img);
+                });
+            })
+            .catch(error => console.error('Error loading images:', error));
+        });
+    </script>
+</body>
+</html>
