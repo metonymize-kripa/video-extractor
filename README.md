@@ -40,6 +40,12 @@ The Video Frame Extractor is a web application that enables users to upload a vi
    ```
 
 ### Running the Application
+0. **Start the Python Flask server:**
+   ```bash
+   cd python-app; python tesseract_server.py
+   ```
+   This will run the flask server on `http://127.0.0.1:5000`. This server handles the OCR processing.
+
 1. **Start the Node.js server:**
    ```bash
    node server.js
