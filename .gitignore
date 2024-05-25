@@ -1,3 +1,6 @@
 node_modules/
 public/
 index.html.bkup
+eng.traineddata
+video_extractor_git.bundle
+server.js.bkup

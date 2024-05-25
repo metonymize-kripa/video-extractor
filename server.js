@@ -1,4 +1,5 @@
 const express = require('express');
+const Tesseract = require('tesseract.js');
 const multer = require('multer');
 const ffmpeg = require('fluent-ffmpeg');
 const sharp = require('sharp');
@@ -49,19 +50,20 @@ app.post('/upload', upload.single('video'), async (req, res) => {
     try {
         await Promise.all(keyframes.map((time, index) => {
             return new Promise((resolve, reject) => {
-                const outputImagePath = `${outputPath}keyframe-${index}.png`;
-                const outputImagePublicPath = `/output/keyframe-${index}.png?timestamp=${Date.now()}`;
+                const inputImagePath = `${outputPath}keyframe-${index}.png`;
+                const outputImagePath = `${outputPath}keyframe-bb-${index}.png`;
+                const outputImagePublicPath = `/output/keyframe-bb-${index}.png`;
 
                 ffmpeg(videoPath)
                     .screenshots({
                         timestamps: [time],
                         filename: `keyframe-${index}.png`,
                         folder: outputPath,
-                        size: '800x450'
+                        //size: '800x450'
                     })
                     .on('end', async () => {
                         try {
-                            await addBoundingBox(outputImagePath, outputImagePath);
+                            await addBoundingBox(inputImagePath, outputImagePath);
                             processedImages.push(outputImagePublicPath);
                             resolve();
                         } catch (err) {
@@ -78,58 +80,46 @@ app.post('/upload', upload.single('video'), async (req, res) => {
 });
 
 
-function addBoundingBox(inputPath, outputPath) {
-    return new Promise((resolve, reject) => {
-        sharp(inputPath)
-            .metadata()
-            .then(metadata => {
-                const imageWidth = metadata.width;
-                const imageHeight = metadata.height;
-                const form = new FormData();
-                form.append('image', fs.createReadStream(inputPath));
-
-                axios.post('http://127.0.0.1:5000/detect_text', form, {
-                    headers: {
-                        ...form.getHeaders()
-                    }
-                })
-                .then(response => {
-                    const boxes = response.data.boxes;
-                    let overlayOptions = boxes.map(box => {
-                        const svg = `<svg width="${imageWidth}" height="${imageHeight}" xmlns="http://www.w3.org/2000/svg"><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="none" stroke="blue" stroke-width="2"/></svg>`;
-                        return {
-                            input: Buffer.from(svg, 'utf-8'),  
-                            top: 0,
-                            left: 0,
-                            blend: 'over'
-                        };                    
-                    });
-
-                    const tempOutputPath = outputPath + '_temp.png';
-
-                    sharp(inputPath)
-                        .composite(overlayOptions)
-                        .toFile(tempOutputPath)
-                        .then(() => {
-                            fs.renameSync(tempOutputPath, outputPath);
-                            resolve();
-                        })
-                        .catch(err => {
-                            console.error('Error processing image with overlays:', err);
-                            reject(err);
-                        });
-                })
-                .catch(error => {
-                    console.error('Failed to detect text:', error);
-                    reject(error);
-                });
-            })
-            .catch(err => {
-                console.error('Error getting image metadata:', err);
-                reject(err);
-            });
-    });
-}
+async function addBoundingBox(inputPath, outputPath) {
+    try {
+      // Use sharp to get image dimensions
+      const metadata = await sharp(inputPath).metadata();
+      const imageWidth = metadata.width;
+      const imageHeight = metadata.height;
+  
+      // Use tesseract.js to detect text and bounding boxes
+      const { data: { words } } = await Tesseract.recognize(
+        inputPath,
+        'eng', // Replace 'eng' with the desired language if needed
+            tessedit_char_whitelist='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789', // Optional: Limit recognized characters
+            oem=3,
+            psm=11,
+        { logger: info => console.log(info) } // Optional: Log Tesseract progress
+      );
+  
+      // Create SVG overlay for each detected word
+      const overlayOptions = words.map(word => {
+        const { x0, y0, x1, y1 } = word.bbox;
+        const svg = `<svg width="${imageWidth}" height="${imageHeight}" xmlns="http://www.w3.org/2000/svg"><rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" fill="none" stroke="blue" stroke-width="2"/></svg>`;
+        return {
+          input: Buffer.from(svg, 'utf-8'),
+          top: 0,
+          left: 0,
+          blend: 'over'
+        };
+      });
+  
+      // Apply overlays using sharp
+      await sharp(inputPath)
+        .composite(overlayOptions)
+        .toFile(outputPath);
+  
+      console.log('Bounding boxes added successfully!');
+    } catch (error) {
+      console.error('Error adding bounding boxes:', error);
+      throw error; 
+    }
+  }
 
 
 app.listen(3000, () => {
